@@ -4,12 +4,13 @@ Created on 6/11/2017
 @author: bgw
 '''
 from os.path import basename
-# import glob
 import random
-# import numpy
 import datetime
 import csv
-# from _sqlite3 import Row
+
+from MSOffice import Excel
+from MSOffice.Excel.Worksheets.Worksheet import Sheet
+from MSOffice.Excel.Worksheets.Worksheet import shtRange
 
 
 
@@ -57,9 +58,9 @@ class DMPFile(object):
             if splitrowstring[0] == '9914':
                 # rowstr = rowstr.split(" ")
                 splitrowstring[2] = kwargs.get('basekva', '100000')
-                for commentplace in range(1, 8):
-                    splitrowstring[commentplace + 2] = '"' + kwargs.get('comment' + str(commentplace),
-                                                          defaultcommentlist[commentplace - 1]) + '"'
+                for commenti in range(1, 8):
+                    splitrowstring[commenti + 2] = '"' + kwargs.get('comment' + str(commenti),
+                                                          defaultcommentlist[commenti - 1]) + '"'
                 # writestr = ""
                 # for item in rowstr:
                     # writestr += str(item) + " "
@@ -69,6 +70,104 @@ class DMPFile(object):
         dmpfile = open(self.dmpfilepath, "w")
         dmpfile.writelines(writelist)
         print "Completed setting network properties"
+
+    def sortsources(self):
+
+        destpath = r"I:\NETWORK\Loadflow\Engineering\TEAM_Engineering\GTech Traces\Resources to Create 2017 Feeder Models\Scaling.xlsx"
+
+        xl = Excel.Launch.Excel(visible=True, runninginstance=False,
+                                BookVisible=True, filename=destpath)
+        wkbdest = Sheet(xl)
+
+        faultlevels = []
+
+        for fault in ("MIN FAULT", "MAX FAULT"):
+            minlastrow = wkbdest.getMaxRow(fault, 1, 1)
+            searchrange = shtRange(fault, None, 1, 1, minlastrow, 1)
+            searchname = self.dmpfilename.upper()[:3]
+            try:
+
+                rownum = wkbdest.search(searchrange, searchname)[0].Row
+                row = wkbdest.getRow(fault, rownum, 14, 17)[0]
+            except:
+                row = (0, 0, 0, 0)
+            faultlevels.append(row)
+
+        self.setsource(sourcename='"{}"'.format(self.encryptcode('MINFAULT')),
+                       posres=str(faultlevels[0][0]),
+                       posrea=str(faultlevels[0][1]),
+                       zerores=str(faultlevels[0][2]),
+                       zerorea=str(faultlevels[0][3]))
+
+        self.addsource(sourcename='"{}"'.format(self.encryptcode('MAXFAULT')),
+                       servicestate='0',
+                       posres=str(faultlevels[1][0]),
+                       posrea=str(faultlevels[1][1]),
+                       zerores=str(faultlevels[1][2]),
+                       zerorea=str(faultlevels[1][3]))
+
+    def addsource(self, **kwargs):
+        sourceparams = [
+            ['sourcename', 3, '"{}"'.format(self.encryptcode('SOURCE'))],
+            ['servicestate', 4, '1'],
+            ['basekva', 6, '100000'],
+            ['posres', 10, '0'],
+            ['posrea', 11, '0'],
+            ['zerores', 12, '0'],
+            ['zerorea', 13, '0'],
+            ['groundres', 14, '0'],
+            ['grouprea', 15, '0']
+            ]
+
+        dmpfile = open(self.dmpfilepath, "r")
+        textlist = dmpfile.readlines()
+        writelist = []
+        for rowstr in textlist:
+            splitrowstring = rowstr.split(" ")
+
+            if splitrowstring[0] == '9926':
+                writelist.append(' '.join(splitrowstring))  # Copies existing line
+
+                for item in sourceparams:
+                    splitrowstring[item[1]] = kwargs.get(item[0], item[2])
+
+            writelist.append(' '.join(splitrowstring))
+
+        dmpfile = open(self.dmpfilepath, "w")
+        dmpfile.writelines(writelist)
+        print "Completed adjusting source"
+
+
+    def setsource(self, **kwargs):
+
+        sourceparams = [
+            ['sourcename', 3, '"{}"'.format(self.encryptcode('MINFAULT'))],
+            ['servicestate', 4, '1'],
+            ['basekva', 6, '100000'],
+            ['posres', 10, '0'],
+            ['posrea', 11, '0'],
+            ['zerores', 12, '0'],
+            ['zerorea', 13, '0'],
+            ['groundres', 14, '0'],
+            ['grouprea', 15, '0']
+            ]
+        dmpfile = open(self.dmpfilepath, "r")
+        textlist = dmpfile.readlines()
+        writelist = []
+        for rowstr in textlist:
+            splitrowstring = rowstr.split(" ")
+
+            if splitrowstring[0] == '9926':
+
+                for item in sourceparams:
+                    splitrowstring[item[1]] = kwargs.get(item[0], item[2])
+
+            writelist.append(' '.join(splitrowstring))
+
+        dmpfile = open(self.dmpfilepath, "w")
+        dmpfile.writelines(writelist)
+        print "Completed adjusting source"
+
 
     def findhighestcode(self, objecttype):
         dmpfile = open(self.dmpfilepath, "r")
@@ -169,7 +268,8 @@ class DMPFile(object):
             highestcode -= 1
         if groupname not in listofgroups:
             dmpfile = open(self.dmpfilepath, "a")
-            dmpfile.write('\n9916 {} "{}" "{}" \n'.format(str(highestcode + 1), groupname, description))
+            dmpfile.write('\n9916 {} "{}" "{}" \n'.format(str(highestcode + 1), groupname,
+                                                          description))
 
     def addline(self, linename, node1, node2, **kwargs):
         listofobjects = self.listallobjects()
@@ -198,9 +298,17 @@ class DMPFile(object):
 
             contype = kwargs.get('contype', "USER")
 
-            linestr = '\n9921 {} {} {} "{}" 1 {} {} {} {} {} {} {} 7 999 999 999 999 {} {} {} {} "{}" 0\n'.format(linecode, node1specs[0], node2specs[0], linename, linelength, posseqres, posseqrea, posseqadm, zeroseqres, zeroseqrea, zeroseqadm, current1, current2, current3, current4, contype)
-            linestr2 = '9953 {} "{}" {} {} 0 \n'.format(linecode, linename, node1specs[1], node1specs[2])
-            linestr3 = '9954 {} "{}" {} {} {} {} \n'.format(linecode, linename, node1specs[1], node1specs[2], node2specs[1], node2specs[2])
+            linestr = ('\n9921 {} {} {} "{}" 1 {} {} {} {} {} {} {} 7 999 999 999 999 {} {} {} {} '
+                       '"{}" 0\n'.format(linecode, node1specs[0], node2specs[0], linename,
+                                         linelength, posseqres, posseqrea, posseqadm, zeroseqres,
+                                         zeroseqrea, zeroseqadm, current1, current2, current3,
+                                         current4, contype))
+
+            linestr2 = '9953 {} "{}" {} {} 0 \n'.format(linecode, linename,
+                                                        node1specs[1], node1specs[2])
+            linestr3 = '9954 {} "{}" {} {} {} {} \n'.format(linecode, linename, node1specs[1],
+                                                            node1specs[2], node2specs[1],
+                                                            node2specs[2])
 
             dmpfile.write(linestr)
             dmpfile.write(linestr2)
@@ -300,17 +408,9 @@ class DMPFile(object):
         dmpfile = open(self.dmpfilepath, "w")
         dmpfile.writelines(writelist)
 
-        print "Completed removing lines that have same from and to node and renaming duplicate names"
+        print "Completed removing lines that have same from & to node and renaming duplicate names"
 
-    #===============================================================================================
-    # def lookup(self, filetype, value):
-    #     for f in glob.glob(filetype):
-    #         r = numpy.recfromcsv(f)
-    #         for item in r:
-    #             if item[0] == value:
-    #                 return item[1]
-    #         return
-    #===============================================================================================
+
 
     def createlookupdic(self):
 
@@ -335,7 +435,6 @@ class DMPFile(object):
                 if code == items:
                     returnstring += name
 
-            # returnstring += self.lookup("decrypt.csv", items)
         print "Your de-crypted code is: %s" % returnstring
         return returnstring
 
@@ -380,7 +479,8 @@ class DMPFile(object):
                 coord = [xcoord, ycoord]
                 while coord in listofcoords:
 
-                    print "Duplicate co-ords: {:10.2f},{:10.2f} on row:{} for node {}. Shifting...".format(coord[0], coord[1], rowcount, splitrowstring[1])
+                    print("Duplicate co-ords: {:10.2f},{:10.2f} on row:{} for node {}. "
+                          "Shifting...".format(coord[0], coord[1], rowcount, splitrowstring[1]))
                     xoffset = random.randint(lowerbound, upperbound) / 10.0
                     yoffset = random.randint(lowerbound, upperbound) / 10.0
 
@@ -396,4 +496,4 @@ class DMPFile(object):
 
         dmpfile = open(self.dmpfilepath, "w")
         dmpfile.writelines(writelist)
-        print "Completed scaling model and offseting nodes that sit on top of each other"
+        print "Completed scaling model and offsetting nodes that sit on top of each other"

@@ -28,15 +28,18 @@ def main(argv):
     ''' Performs the required function call depending on the input arguments '''
 
     try:
-        opts, args = getopt.getopt(argv, "hr:e:d:o:c:")
+        opts, args = getopt.getopt(argv, "hr:e:d:o:c:s:")
     except getopt.GetoptError:
         helpme()
     if opts == []:
         helpme()
     for opt, arg in opts:
 
-
-        if opt == '-r':
+        if opt == '-s':
+            dmpf = dmp(arg)
+            dmpf.sortsources()
+            # dmpf.setsource()
+        elif opt == '-r':
             dmpf = dmp(arg)
             dmpf.correctdmp()
 
@@ -45,6 +48,7 @@ def main(argv):
             dmpf.correctdmp()
             dmpf.offsetnodes()
             dmpf.setheader()
+            dmpf.sortsources()
 
         elif opt == '-e':
             dmpf = dmp(r'C:\Temp\TEST.DMP')
